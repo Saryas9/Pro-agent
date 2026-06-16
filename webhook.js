@@ -1,7 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export default async function handler(req, res) {
-    // تەنها ڕێگە بە ڕیکوێستی POST دەدەین
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
@@ -9,44 +8,49 @@ export default async function handler(req, res) {
     const payload = req.body;
     const SYSTEM_PASSCODE = "Professor_Agent_001";
 
-    // پشکنینی ئاسایش و وشەی نهێنی
     if (payload.system_passcode !== SYSTEM_PASSCODE) {
-        console.warn("⚠️ ئاگاداری: هەوڵێکی چوونەژوورەوەی ڕێگەپێنەدراو!");
         return res.status(403).json({ error: 'Unauthorized' });
     }
 
     try {
-        // هێنانە ناوەوەی کلیلی API کە لە ڕێکخستنەکانی Vercel دادەنرێت
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        
-        // جێگیرکردنی مۆدێلی Gemini 2.5 Flash
         const model = genAI.getGenerativeModel({ 
             model: "gemini-2.5-flash",
-            systemInstruction: "تۆ ئێستا پرۆفیسۆرێکی باڵای دارایی و وەبەرهێنانیت. بە وردی داتای بازاڕ بخوێنەوە، مەترسییەکان هەڵبسەنگێنە، و بە زمانێکی ئەکادیمی و لۆژیکی وەڵام بدەرەوە."
+            systemInstruction: "تۆ ئێستا پرۆفیسۆرێکی باڵای دارایی و وەبەرهێنانیت. بە وردی داتای بازاڕ بخوێنەوە، مەترسییەکان هەڵبسەنگێنە، و بە زمانێکی ئەکادیمی و لۆژیکی بە زمانی کوردی وەڵام بدەرەوە."
         });
 
-        // ئامادەکردنی پرۆمپتەکە بۆ ئەیجێنتەکە
-        const userMessage = `بەپەلە: سیگناڵێکی نوێی بازاڕ گەیشتووە.
+        const userMessage = `بەپەلە: سیگناڵی ڕیزبوونی 8 لاینی گەیشتووە.
         - دراو: ${payload.market_pair}
-        - تایم فرەیم: ${payload.timeframe}
         - جۆری مامەڵە: ${payload.action_type}
-        - نرخی چوونە ژوورەوە: ${payload.entry_price}
-        - دۆخی VWAP: ${payload.vwap_confluence}
-        - کاتی ڕوودان: ${payload.current_time}
+        - نرخی ئێستا: ${payload.entry_price}
         
-        ئەی پرۆفیسۆر، تکایە بەپێی ئەم داتایە و ستراتیژیی 'سێگۆشەی زێڕین'، شیکارییەکی خێرامان پێ بدە و پێمان بڵێ ئایا ئەمە کاتێکی گونجاوە بۆ چوونە ناو مامەڵە؟`;
+        ئەی پرۆفیسۆر، تکایە شیکارییەکی خێرامان پێ بدە بۆ ئەم دۆخە.`;
 
-        // ناردنی زانیارییەکان بۆ پرۆفیسۆرەکە
         const result = await model.generateContent(userMessage);
         const responseText = result.response.text();
 
-        console.log("🧠 شیکاریی پرۆفیسۆر:\n", responseText);
+        // ----------------------------------------------------
+        // بڕگەی نوێ: ناردنی شیکارییەکە و زەنگەکە بۆ تێلیگرام
+        // ----------------------------------------------------
+        const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+        const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+        
+        const telegramMessage = `🚨 <b>سیگناڵی نوێ گەیشت!</b>\n\n🔹 دراو: ${payload.market_pair}\n🔹 ئاراستە: ${payload.action_type}\n🔹 نرخ: $${payload.entry_price}\n\n🧠 <b>شیکاری پرۆفیسۆر:</b>\n${responseText}`;
 
-        // وەڵامدانەوەی سێرڤەر بە سەرکەوتوویی
-        return res.status(200).json({ 
-            message: "Signal processed safely by Professor Agent.",
-            analysis: responseText
+        const telegramUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+        
+        await fetch(telegramUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: TELEGRAM_CHAT_ID,
+                text: telegramMessage,
+                parse_mode: 'HTML'
+            })
         });
+
+        console.log("✅ شیکارییەکە بە سەرکەوتوویی نێردرا بۆ تێلیگرام.");
+        return res.status(200).json({ message: "Signal processed and sent to Telegram." });
 
     } catch (error) {
         console.error("❌ هەڵەیەک ڕوویدا لە کاتی پرۆسێسکردندا:", error);
